@@ -1,36 +1,77 @@
 import React, { useCallback, useState } from 'react';
-import { Upload, X, Image as ImageIcon } from 'lucide-react';
+import { Upload, X, Image as ImageIcon, FileText, File } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
-interface ImageUploadProps {
-  onImageSelect: (file: File) => void;
-  selectedImage: File | null;
-  onRemoveImage: () => void;
+interface FileUploadProps {
+  onFileSelect: (file: File) => void;
+  selectedFile: File | null;
+  onRemoveFile: () => void;
   disabled?: boolean;
+  isProcessing?: boolean;
 }
 
-const ImageUpload: React.FC<ImageUploadProps> = ({
-  onImageSelect,
-  selectedImage,
-  onRemoveImage,
-  disabled = false
+const FileUpload: React.FC<FileUploadProps> = ({
+  onFileSelect,
+  selectedFile,
+  onRemoveFile,
+  disabled = false,
+  isProcessing = false
 }) => {
   const [dragActive, setDragActive] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
+  // Supported file types
+  const supportedTypes = {
+    'image/*': ['.jpeg', '.jpg', '.png', '.gif', '.webp'],
+    'application/pdf': ['.pdf'],
+    'application/msword': ['.doc'],
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx']
+  };
+
+  // Get file icon based on type
+  const getFileIcon = (file: File) => {
+    if (file.type.startsWith('image/')) return <ImageIcon className="h-4 w-4" />;
+    if (file.type === 'application/pdf') return <FileText className="h-4 w-4" />;
+    return <File className="h-4 w-4" />;
+  };
+
   // Handle file selection
   const handleFileSelect = useCallback((file: File) => {
-    if (file && file.type.startsWith('image/')) {
-      console.log('Selected image:', file.name, file.size, file.type);
-      onImageSelect(file);
+    if (!file) return;
 
-      // Create preview URL
+    // Validate file type
+    const isValidType = Object.entries(supportedTypes).some(([mime, exts]) => {
+      const ext = `.${file.name.split('.').pop()?.toLowerCase()}`;
+      return (
+        file.type.match(new RegExp(mime.replace('*', '.*'))) || 
+        (ext && exts.includes(ext))
+      );
+    });
+
+    if (!isValidType) {
+      toast.error('Unsupported file type');
+      return;
+    }
+
+    // Validate file size (10MB max)
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('File size exceeds 10MB limit');
+      return;
+    }
+
+    onFileSelect(file);
+
+    // Create preview URL for images only
+    if (file.type.startsWith('image/')) {
       const url = URL.createObjectURL(file);
       setPreviewUrl(url);
+    } else {
+      setPreviewUrl(null);
     }
-  }, [onImageSelect]);
+  }, [onFileSelect, supportedTypes]);
 
   // Handle drag events
   const handleDrag = useCallback((e: React.DragEvent) => {
@@ -49,13 +90,13 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
     e.stopPropagation();
     setDragActive(false);
 
-    if (disabled) return;
+    if (disabled || isProcessing) return;
 
     const files = e.dataTransfer.files;
     if (files && files[0]) {
       handleFileSelect(files[0]);
     }
-  }, [handleFileSelect, disabled]);
+  }, [handleFileSelect, disabled, isProcessing]);
 
   // Handle file input change
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -63,16 +104,18 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
     if (files && files[0]) {
       handleFileSelect(files[0]);
     }
+    // Reset input to allow selecting the same file again
+    e.target.value = '';
   }, [handleFileSelect]);
 
-  // Handle remove image
+  // Handle remove file
   const handleRemove = useCallback(() => {
     if (previewUrl) {
       URL.revokeObjectURL(previewUrl);
       setPreviewUrl(null);
     }
-    onRemoveImage();
-  }, [previewUrl, onRemoveImage]);
+    onRemoveFile();
+  }, [previewUrl, onRemoveFile]);
 
   // Clean up preview URL on unmount
   React.useEffect(() => {
@@ -84,81 +127,93 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
   }, [previewUrl]);
 
   return (
-    <Card className="w-full" data-id="m42jukuka" data-path="src/components/ImageUpload.tsx">
-      <CardContent className="p-6" data-id="35mqw12bo" data-path="src/components/ImageUpload.tsx">
-        {selectedImage ?
-        // Image preview
-        <div className="space-y-4" data-id="x5lpbzjyy" data-path="src/components/ImageUpload.tsx">
-            <div className="relative group" data-id="p7k9udgq8" data-path="src/components/ImageUpload.tsx">
-              <img
-              src={previewUrl || ''}
-              alt="Selected image"
-              className="w-full max-h-64 object-contain rounded-lg border" data-id="cl1itqydl" data-path="src/components/ImageUpload.tsx" />
-
+    <Card className="w-full">
+      <CardContent className="p-6">
+        {selectedFile ? (
+          // File preview
+          <div className="space-y-4">
+            <div className="relative group">
+              {previewUrl ? (
+                <img
+                  src={previewUrl}
+                  alt="Selected file preview"
+                  className="w-full max-h-64 object-contain rounded-lg border"
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center p-8 border rounded-lg bg-gray-50">
+                  <div className="p-3 bg-gray-100 rounded-full mb-4">
+                    {getFileIcon(selectedFile)}
+                  </div>
+                  <p className="text-sm font-medium">{selectedFile.name}</p>
+                </div>
+              )}
+              
               <Button
-              variant="destructive"
-              size="sm"
-              className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
-              onClick={handleRemove}
-              disabled={disabled} data-id="3bk7yqi52" data-path="src/components/ImageUpload.tsx">
-
-                <X className="h-4 w-4" data-id="bxfdiy17q" data-path="src/components/ImageUpload.tsx" />
+                variant="destructive"
+                size="sm"
+                className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                onClick={handleRemove}
+                disabled={disabled || isProcessing}
+              >
+                <X className="h-4 w-4" />
               </Button>
             </div>
-            <div className="text-sm text-gray-600" data-id="hhsf13cfb" data-path="src/components/ImageUpload.tsx">
-              <p data-id="kcagycks9" data-path="src/components/ImageUpload.tsx"><strong data-id="7yi1ybg63" data-path="src/components/ImageUpload.tsx">File:</strong> {selectedImage.name}</p>
-              <p data-id="owjab7k2w" data-path="src/components/ImageUpload.tsx"><strong data-id="1renzkv12" data-path="src/components/ImageUpload.tsx">Size:</strong> {(selectedImage.size / 1024 / 1024).toFixed(2)} MB</p>
-              <p data-id="eafw54oh3" data-path="src/components/ImageUpload.tsx"><strong data-id="2lgvit0bi" data-path="src/components/ImageUpload.tsx">Type:</strong> {selectedImage.type}</p>
+            
+            <div className="text-sm text-gray-600">
+              <p><strong>File:</strong> {selectedFile.name}</p>
+              <p><strong>Size:</strong> {(selectedFile.size / 1024 / 1024).toFixed(2)} MB</p>
+              <p><strong>Type:</strong> {selectedFile.type || 'Unknown'}</p>
             </div>
-          </div> :
-
-        // Upload area
-        <div
-          className={cn(
-            "border-2 border-dashed rounded-lg p-8 text-center transition-colors",
-            dragActive ? "border-blue-500 bg-blue-50" : "border-gray-300",
-            disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:border-gray-400"
-          )}
-          onDragEnter={handleDrag}
-          onDragLeave={handleDrag}
-          onDragOver={handleDrag}
-          onDrop={handleDrop}
-          onClick={() => !disabled && document.getElementById('file-input')?.click()} data-id="xc5c7mo3l" data-path="src/components/ImageUpload.tsx">
-
-            <div className="flex flex-col items-center space-y-4" data-id="nugfp4xyu" data-path="src/components/ImageUpload.tsx">
-              <div className="p-4 bg-gray-100 rounded-full" data-id="vwvl9yx37" data-path="src/components/ImageUpload.tsx">
-                {dragActive ?
-              <Upload className="h-8 w-8 text-blue-500" data-id="g95i6g5wz" data-path="src/components/ImageUpload.tsx" /> :
-
-              <ImageIcon className="h-8 w-8 text-gray-500" data-id="6pc6x567z" data-path="src/components/ImageUpload.tsx" />
-              }
+          </div>
+        ) : (
+          // Upload area
+          <div
+            className={cn(
+              "border-2 border-dashed rounded-lg p-8 text-center transition-colors",
+              dragActive ? "border-blue-500 bg-blue-50" : "border-gray-300",
+              disabled || isProcessing ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:border-gray-400"
+            )}
+            onDragEnter={handleDrag}
+            onDragLeave={handleDrag}
+            onDragOver={handleDrag}
+            onDrop={handleDrop}
+            onClick={() => !disabled && !isProcessing && document.getElementById('file-input')?.click()}
+          >
+            <div className="flex flex-col items-center space-y-4">
+              <div className="p-4 bg-gray-100 rounded-full">
+                {dragActive ? (
+                  <Upload className="h-8 w-8 text-blue-500" />
+                ) : (
+                  <ImageIcon className="h-8 w-8 text-gray-500" />
+                )}
               </div>
-              <div data-id="fcakqpi7i" data-path="src/components/ImageUpload.tsx">
-                <p className="text-lg font-medium text-gray-900" data-id="eyj60pykk" data-path="src/components/ImageUpload.tsx">
-                  {dragActive ? 'Drop your image here' : 'Upload an image'}
+              
+              <div>
+                <p className="text-lg font-medium text-gray-900">
+                  {isProcessing ? 'Processing file...' : dragActive ? 'Drop your file here' : 'Upload a file'}
                 </p>
-                <p className="text-sm text-gray-500 mt-1" data-id="mghjwpl14" data-path="src/components/ImageUpload.tsx">
-                  Drag and drop or click to select
+                <p className="text-sm text-gray-500 mt-1">
+                  {isProcessing ? 'Please wait while we process your file' : 'Drag and drop or click to select'}
                 </p>
-                <p className="text-xs text-gray-400 mt-2" data-id="wh8nq68uy" data-path="src/components/ImageUpload.tsx">
-                  Supports: JPG, PNG, GIF, WebP
+                <p className="text-xs text-gray-400 mt-2">
+                  Supports: JPG, PNG, PDF, DOC, DOCX
                 </p>
               </div>
             </div>
             
             <input
-            id="file-input"
-            type="file"
-            className="hidden"
-            accept="image/*"
-            onChange={handleInputChange}
-            disabled={disabled} data-id="3yp52cuc6" data-path="src/components/ImageUpload.tsx" />
-
+              id="file-input"
+              type="file"
+              className="hidden"
+              accept={Object.keys(supportedTypes).join(',')}
+              onChange={handleInputChange}
+              disabled={disabled || isProcessing}
+            />
           </div>
-        }
+        )}
       </CardContent>
-    </Card>);
-
+    </Card>
+  );
 };
 
-export default ImageUpload;
+export default FileUpload;
